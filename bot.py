@@ -1,27 +1,33 @@
 import telebot
 import os
 import requests
-import socket
 import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
+# Настройки из переменных Render
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 API_KEY = os.environ.get("AI_API_KEY")
 PORT = int(os.environ.get("PORT", 8080))
 
 bot = telebot.TeleBot(TOKEN)
 
-# Функция-заглушка для открытия порта
-def start_server():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(('0.0.0.0', PORT))
-    s.listen(1)
-    while True:
-        conn, addr = s.accept()
-        conn.close()
+# Веб-сервер на встроенной библиотеке Python (на сто процентов не требует Flask)
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain; charset=utf-8')
+        self.end_headers()
+        self.wfile.write("Бот работает!".encode('utf-8'))
 
-# Запускаем открытие порта в отдельном потоке
-threading.Thread(target=start_server, daemon=True).start()
+def run_server():
+    server = HTTPServer(('0.0.0.0', PORT), SimpleHTTPRequestHandler)
+    print(f"Встроенный веб-сервер запущен на порту {PORT}")
+    server.serve_forever()
 
+# Запускаем веб-сервер в отдельном потоке, чтобы он не мешал боту
+threading.Thread(target=run_server, daemon=True).start()
+
+# Функция запроса к Gemini
 def ask_ai(text):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
     try:
@@ -33,10 +39,11 @@ def ask_ai(text):
     except Exception as e:
         return f"Ошибка подключения: {str(e)}"
 
+# Обработчик сообщений в Telegram
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     reply = ask_ai(message.text)
     bot.reply_to(message, reply)
 
-print("Бот запущен!")
+print("Бот успешно запущен и слушает команды!")
 bot.infinity_polling()
